@@ -258,6 +258,10 @@ class BlockchainSpammer:
         # Display summary
         console.print()
         self._display_rapid_summary(tx_hashes, send_errors, elapsed, tx_per_second)
+        
+        # Check receipts for all sent transactions
+        if tx_hashes:
+            self._check_receipts(tx_hashes)
 
     def _display_rapid_summary(self, tx_hashes: list, send_errors: int, elapsed: float, tx_per_second: float):
         """Display summary for rapid fire mode"""
@@ -289,8 +293,101 @@ class BlockchainSpammer:
                 console.print(f"  [dim]... and {len(tx_hashes) - 5} more[/dim]")
         
         console.print()
-        console.print("[yellow]ℹ️  Transactions sent without waiting for confirmation.[/yellow]")
-        console.print("[dim]Check blockchain explorer or use eth_getTransactionReceipt to verify status.[/dim]")
+        console.print("[yellow]ℹ️  Checking transaction receipts...[/yellow]")
+        console.print()
+    
+    def _check_receipts(self, tx_hashes: list):
+        """Check receipts for all sent transactions"""
+        console.print(Panel.fit(
+            "[bold yellow]🔍 Checking Transaction Receipts[/bold yellow]",
+            border_style="yellow"
+        ))
+        console.print()
+        
+        successful = 0
+        failed = 0
+        pending = 0
+        total_gas_used = 0
+        
+        with Progress(
+            SpinnerColumn(spinner_name="dots"),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(bar_width=40),
+            TaskProgressColumn(),
+            console=console
+        ) as progress:
+            
+            check_task = progress.add_task(
+                "[cyan]Checking receipts...", 
+                total=len(tx_hashes)
+            )
+            
+            for i, tx_hash in enumerate(tx_hashes, 1):
+                try:
+                    # Try to get receipt with timeout
+                    receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=30)
+                    
+                    if receipt.status == 1:
+                        successful += 1
+                        total_gas_used += receipt.gasUsed
+                        progress.console.print(
+                            f"  [green]✅ TX {i}[/green] {tx_hash.hex()[:10]}... "
+                            f"[dim]Block: {receipt.blockNumber}, Gas: {receipt.gasUsed:,}[/dim]"
+                        )
+                    else:
+                        failed += 1
+                        progress.console.print(
+                            f"  [red]❌ TX {i}[/red] {tx_hash.hex()[:10]}... [dim]Reverted[/dim]"
+                        )
+                    
+                except Exception as e:
+                    # Transaction might be pending or failed to be included
+                    pending += 1
+                    progress.console.print(
+                        f"  [yellow]⏳ TX {i}[/yellow] {tx_hash.hex()[:10]}... [dim]Timeout/Pending[/dim]"
+                    )
+                
+                progress.update(check_task, advance=1)
+        
+        # Display final receipt summary
+        console.print()
+        self._display_receipt_summary(successful, failed, pending, total_gas_used, len(tx_hashes))
+
+    def _display_receipt_summary(self, successful: int, failed: int, pending: int, total_gas_used: int, total: int):
+        """Display summary of receipt checking"""
+        stats_table = Table(show_header=False, box=box.SIMPLE)
+        stats_table.add_column("Status", style="cyan", width=25)
+        stats_table.add_column("Count", style="bright_white")
+        
+        success_rate = (successful / total * 100) if total > 0 else 0
+        
+        stats_table.add_row("✅ Confirmed", f"[bold green]{successful}[/bold green]")
+        stats_table.add_row("❌ Reverted", f"[bold red]{failed}[/bold red]")
+        stats_table.add_row("⏳ Pending/Timeout", f"[bold yellow]{pending}[/bold yellow]")
+        stats_table.add_row("📊 Success Rate", f"[bold]{'%.1f' % success_rate}%[/bold]")
+        
+        if successful > 0:
+            avg_gas = total_gas_used // successful
+            stats_table.add_row("⛽ Total Gas Used", f"[yellow]{total_gas_used:,}[/yellow]")
+            stats_table.add_row("📊 Avg Gas/TX", f"[yellow]{avg_gas:,}[/yellow]")
+        
+        # Choose title based on success rate
+        if success_rate >= 90:
+            title = "[bold green]✅ Excellent Results![/bold green]"
+            border_color = "green"
+        elif success_rate >= 70:
+            title = "[bold yellow]⚠️ Mixed Results[/bold yellow]"
+            border_color = "yellow"
+        else:
+            title = "[bold red]❌ Poor Results[/bold red]"
+            border_color = "red"
+        
+        console.print(Panel(
+            stats_table,
+            title=title,
+            border_style=border_color,
+            box=box.DOUBLE
+        ))
         console.print()
 
     def _display_summary(self, successful: int, failed: int, total_gas: int, tx_results: list):
