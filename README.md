@@ -4,11 +4,11 @@ High-performance blockchain transaction spammer for testing ModexpWorkchain smar
 
 ## Features
 
-- **Rapid Fire Mode** - Send transactions without waiting for confirmations
-- **Auto-optimization** - Automatically calculates optimal rounds based on gas limit
-- **Custom Gas Control** - Specify gas price in gwei
-- **Rich CLI** - Professional colorful output with progress tracking
-- **Gas Simulation** - Estimate gas usage without sending transactions
+- 🚀 **Rapid Fire Mode** - Send transactions without waiting for confirmations
+- ⚡ **Auto-optimization** - Automatically calculates optimal rounds based on gas limit  
+- ⛽ **Custom Gas Control** - Specify gas price in gwei
+- 🎨 **Rich CLI** - Professional colorful output with progress tracking
+- 📊 **Gas Simulation** - Estimate gas usage without sending transactions
 
 ## Installation
 
@@ -49,15 +49,29 @@ python3 spammer.py \
 - `--no-deploy` - Skip contract deployment
 - `--contract` - Contract address (required with --no-deploy)
 
-## Tools
+## Project Structure
 
-- `spammer.py` - Main transaction spammer
-- `simulate_gas.py` - Simulate gas usage with eth_estimateGas
-- `gas_profiler.py` - Profile gas consumption patterns
+```
+├── spammer.py           # Main transaction spammer
+├── contracts/           # Smart contract files
+│   ├── contract.sol
+│   ├── contract.abi
+│   └── contract.bytecode
+└── tools/               # Utility scripts
+    └── simulate_gas.py  # Gas estimation without spending ETH
+```
 
 ## Gas Optimization
 
-See [GAS_OPTIMIZATION.md](GAS_OPTIMIZATION.md) for optimal gas/rounds ratios.
+The spammer automatically calculates optimal rounds using the formula:
+```
+Max Rounds = (Gas Limit × 0.9 - 27,000) ÷ 2,692
+```
+
+For manual gas estimation without spending ETH:
+```bash
+python3 tools/simulate_gas.py --rpc YOUR_RPC --private-key YOUR_KEY --contract CONTRACT_ADDRESS
+```
 
 ## License
 

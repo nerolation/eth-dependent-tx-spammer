@@ -115,8 +115,8 @@ class BlockchainSpammer:
         console.print()
 
     def load_contract_data(self):
-        bytecode_path = Path(__file__).parent / "contract.bytecode"
-        abi_path = Path(__file__).parent / "contract.abi"
+        bytecode_path = Path(__file__).parent / "contracts" / "contract.bytecode"
+        abi_path = Path(__file__).parent / "contracts" / "contract.abi"
 
         with open(bytecode_path, "r") as f:
             bytecode = f.read().strip()

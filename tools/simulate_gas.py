@@ -16,7 +16,7 @@ def simulate_gas_usage(rpc_url: str, private_key: str, contract_address: str):
 
     account = Account.from_key(private_key)
     
-    abi_path = Path(__file__).parent / "contract.abi"
+    abi_path = Path(__file__).parent.parent / "contracts" / "contract.abi"
     with open(abi_path, "r") as f:
         abi = json.load(f)
     
