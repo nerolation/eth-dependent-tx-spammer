@@ -1,14 +1,6 @@
-# Ethereum Transaction Spammer
+# eth-dependent-tx-spammer
 
-High-performance blockchain transaction spammer for testing ModexpWorkchain smart contracts on Ethereum networks.
-
-## Features
-
-- 🚀 **Rapid Fire Mode** - Send transactions without waiting for confirmations
-- ⚡ **Auto-optimization** - Automatically calculates optimal rounds based on gas limit  
-- ⛽ **Custom Gas Control** - Specify gas price in gwei
-- 🎨 **Rich CLI** - Professional colorful output with progress tracking
-- 📊 **Gas Simulation** - Estimate gas usage without sending transactions
+Transaction spammer for stress testing ModexpWorkchain contracts on Ethereum networks.
 
 ## Installation
 
@@ -18,60 +10,43 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Basic Usage
-
 ```bash
-python3 spammer.py --private-key YOUR_KEY --rpc YOUR_RPC_URL
-```
+# Deploy and spam
+python3 spammer.py --private-key KEY --rpc RPC_URL
 
-### High-throughput Testing (10M gas, custom price)
-
-```bash
+# Spam existing contract (10M gas, 50 gwei)
 python3 spammer.py \
-  --private-key YOUR_KEY \
-  --rpc YOUR_RPC_URL \
+  --private-key KEY \
+  --rpc RPC_URL \
   --no-deploy \
-  --contract CONTRACT_ADDRESS \
+  --contract ADDRESS \
   --gas-limit 10000000 \
   --gas-price 50 \
   --txs 10
 ```
 
-### Parameters
+## Parameters
 
-- `--rpc` - RPC endpoint URL (default: Sepolia)
-- `--chain-id` - Network chain ID (default: 11155111 for Sepolia)
-- `--private-key` - Private key for transactions (required)
-- `--gas-limit` - Gas limit per transaction (default: 500000)
-- `--gas-price` - Gas price in gwei (uses network price if not set)
-- `--rounds` - Modexp rounds per TX (auto-calculated if not set)
-- `--txs` - Number of transactions to send (default: 10)
-- `--no-deploy` - Skip contract deployment
+- `--rpc` - RPC endpoint (default: Sepolia)
+- `--chain-id` - Chain ID (default: 11155111)
+- `--private-key` - Private key (required)
+- `--gas-limit` - Gas limit per tx (default: 500000)
+- `--gas-price` - Gas price in gwei (optional)
+- `--rounds` - Modexp rounds per tx (auto-calculated if not set)
+- `--txs` - Number of transactions (default: 10)
+- `--no-deploy` - Skip deployment
 - `--contract` - Contract address (required with --no-deploy)
-
-## Project Structure
-
-```
-├── spammer.py           # Main transaction spammer
-├── contracts/           # Smart contract files
-│   ├── contract.sol
-│   ├── contract.abi
-│   └── contract.bytecode
-└── tools/               # Utility scripts
-    └── simulate_gas.py  # Gas estimation without spending ETH
-```
 
 ## Gas Optimization
 
-The spammer automatically calculates optimal rounds using the formula:
+Rounds are auto-calculated using:
 ```
-Max Rounds = (Gas Limit × 0.9 - 27,000) ÷ 2,692
+rounds = floor((gas_limit * 0.9 - 27000) / 2692)
 ```
 
-For manual gas estimation without spending ETH:
-```bash
-python3 tools/simulate_gas.py --rpc YOUR_RPC --private-key YOUR_KEY --contract CONTRACT_ADDRESS
-```
+## Tools
+
+- `tools/simulate_gas.py` - Estimate gas without sending transactions
 
 ## License
 
