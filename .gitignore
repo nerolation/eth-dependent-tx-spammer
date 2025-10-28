@@ -1,6 +1,7 @@
 # Sensitive files
 pk.txt
 rpc.txt
+run_brancher_scale10.txt
 *.key
 *.pem
 .env

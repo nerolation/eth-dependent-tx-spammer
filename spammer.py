@@ -35,6 +35,8 @@ class BlockchainSpammer:
         rounds_per_tx: Optional[int],
         total_txs: int,
         gas_price_gwei: Optional[float] = None,
+        contract_name: str = "contract",
+        function_args: Optional[list] = None,
     ):
         self.w3 = Web3(Web3.HTTPProvider(rpc_url))
         if not self.w3.is_connected():
@@ -45,6 +47,8 @@ class BlockchainSpammer:
         self.chain_id = chain_id
         self.gas_limit = gas_limit
         self.total_txs = total_txs
+        self.contract_name = contract_name
+        self.function_args = function_args or []  # Store custom function arguments
         
         # Set gas price (convert from gwei to wei if provided)
         if gas_price_gwei is not None:
@@ -87,6 +91,7 @@ class BlockchainSpammer:
         
         info_table.add_row("🌐 Network", f"[bold]{rpc_url.split('@')[-1] if '@' in rpc_url else rpc_url[:50]}...[/bold]")
         info_table.add_row("🔗 Chain ID", f"[yellow]{self.chain_id}[/yellow]")
+        info_table.add_row("📜 Contract Type", f"[cyan]{self.contract_name}[/cyan]")
         info_table.add_row("👤 Account", f"[green]{self.account.address}[/green]")
         info_table.add_row("💰 Balance", f"[bold green]{balance_eth:.6f} ETH[/bold green]")
         info_table.add_row("⚡ Gas Limit", f"[blue]{self.gas_limit:,}[/blue]")
@@ -105,6 +110,11 @@ class BlockchainSpammer:
         else:
             info_table.add_row("🔄 Rounds/TX", f"[magenta]{self.rounds_per_tx}[/magenta]")
         
+        # Show function arguments if custom ones are provided
+        if self.function_args:
+            args_str = ", ".join(str(arg) for arg in self.function_args)
+            info_table.add_row("📊 Function Args", f"[cyan]{args_str}[/cyan]")
+        
         console.print()
         console.print(Panel(
             info_table,
@@ -115,8 +125,13 @@ class BlockchainSpammer:
         console.print()
 
     def load_contract_data(self):
-        bytecode_path = Path(__file__).parent / "contracts" / "contract.bytecode"
-        abi_path = Path(__file__).parent / "contracts" / "contract.abi"
+        bytecode_path = Path(__file__).parent / "contracts" / f"{self.contract_name}.bytecode"
+        abi_path = Path(__file__).parent / "contracts" / f"{self.contract_name}.abi"
+
+        if not bytecode_path.exists():
+            raise FileNotFoundError(f"Contract bytecode not found: {bytecode_path}")
+        if not abi_path.exists():
+            raise FileNotFoundError(f"Contract ABI not found: {abi_path}")
 
         with open(bytecode_path, "r") as f:
             bytecode = f.read().strip()
@@ -128,7 +143,7 @@ class BlockchainSpammer:
 
     def deploy_contract(self) -> str:
         console.print(Panel.fit(
-            "[bold yellow]📦 Deploying ModexpWorkchain Contract...[/bold yellow]",
+            f"[bold yellow]📦 Deploying {self.contract_name} Contract...[/bold yellow]",
             border_style="yellow"
         ))
         
@@ -159,13 +174,34 @@ class BlockchainSpammer:
             # Sign and send
             task2 = progress.add_task("[cyan]Signing and sending transaction...", total=None)
             signed_tx = self.account.sign_transaction(built_tx)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
             progress.update(task2, description=f"[green]✓ TX sent: {tx_hash.hex()[:10]}...")
             
             # Wait for confirmation
             task3 = progress.add_task("[cyan]Waiting for confirmation...", total=None)
             receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
             progress.update(task3, description="[green]✓ Confirmed!")
+            
+            # Verify deployment was successful
+            task4 = progress.add_task("[cyan]Verifying deployment...", total=None)
+            
+            # Check receipt status
+            if receipt.status != 1:
+                progress.update(task4, description="[red]✗ Deployment failed!")
+                raise RuntimeError(f"Contract deployment failed. Transaction reverted. TX: {tx_hash.hex()}")
+            
+            # Check contract address exists
+            if not receipt.contractAddress:
+                progress.update(task4, description="[red]✗ No contract address!")
+                raise RuntimeError(f"No contract address in receipt. TX: {tx_hash.hex()}")
+            
+            # Check deployed bytecode exists and is not empty
+            deployed_bytecode = self.w3.eth.get_code(receipt.contractAddress)
+            if not deployed_bytecode or deployed_bytecode == b'' or deployed_bytecode == b'0x':
+                progress.update(task4, description="[red]✗ No bytecode at address!")
+                raise RuntimeError(f"No bytecode found at contract address {receipt.contractAddress}")
+            
+            progress.update(task4, description="[green]✓ Deployment verified!")
 
         contract_address = receipt.contractAddress
         
@@ -191,10 +227,22 @@ class BlockchainSpammer:
         _, abi = self.load_contract_data()
         contract = self.w3.eth.contract(address=contract_address, abi=abi)
 
+        # Prepare display message based on contract type and arguments
+        if self.function_args:
+            if hasattr(contract.functions, 'run'):
+                arg1 = self.function_args[0] if len(self.function_args) > 0 else self.rounds_per_tx
+                arg2 = self.function_args[1] if len(self.function_args) > 1 else 1
+                params_str = f"delta={arg1}, scale={arg2}"
+            else:
+                arg1 = self.function_args[0] if len(self.function_args) > 0 else self.rounds_per_tx
+                params_str = f"rounds={arg1}"
+        else:
+            params_str = f"{self.rounds_per_tx} rounds"
+        
         console.print(Panel.fit(
             f"[bold magenta]🚀 Rapid Fire Mode[/bold magenta]\n"
             f"[cyan]Target:[/cyan] {contract_address}\n"
-            f"[cyan]Transactions:[/cyan] {self.total_txs} × {self.rounds_per_tx} rounds\n"
+            f"[cyan]Transactions:[/cyan] {self.total_txs} × {params_str}\n"
             f"[yellow]⚡ Sending without waiting for receipts[/yellow]",
             border_style="magenta"
         ))
@@ -230,12 +278,29 @@ class BlockchainSpammer:
                         "nonce": nonce,
                     }
 
-                    function_call = contract.functions.step(self.rounds_per_tx)
+                    # Dynamically call the appropriate function based on available contract functions
+                    function_call = None
+                    
+                    # Check which function is available in the contract
+                    if hasattr(contract.functions, 'step'):
+                        # Contract has step() function
+                        # Use first arg if provided, otherwise use rounds_per_tx
+                        arg1 = self.function_args[0] if len(self.function_args) > 0 else self.rounds_per_tx
+                        function_call = contract.functions.step(arg1)
+                    elif hasattr(contract.functions, 'run'):
+                        # Contract has run() function (e.g., contract_brancher)
+                        # run(delta, scale) - use custom args or defaults
+                        arg1 = self.function_args[0] if len(self.function_args) > 0 else self.rounds_per_tx
+                        arg2 = self.function_args[1] if len(self.function_args) > 1 else 1
+                        function_call = contract.functions.run(arg1, arg2)
+                    else:
+                        raise ValueError(f"Contract does not have a supported function (step or run)")
+                    
                     built_tx = function_call.build_transaction(tx)
                     signed_tx = self.account.sign_transaction(built_tx)
                     
                     # Send transaction WITHOUT waiting
-                    tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+                    tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
                     tx_hashes.append(tx_hash)
                     
                     progress.update(
@@ -514,6 +579,31 @@ def main():
         help="Contract address (required if --no-deploy is used)",
     )
 
+    parser.add_argument(
+        "--contract-name",
+        default="contract",
+        help="Name of the contract files to load (without extension, e.g., 'contract' or 'contract_brancher')",
+    )
+
+    parser.add_argument(
+        "--arg1",
+        type=int,
+        help="First argument for contract function (e.g., rounds for step() or delta for run())",
+    )
+
+    parser.add_argument(
+        "--arg2",
+        type=int,
+        help="Second argument for contract function (e.g., scale for run())",
+    )
+
+    parser.add_argument(
+        "--args",
+        nargs="+",
+        type=int,
+        help="Multiple arguments for contract function (alternative to --arg1 --arg2)",
+    )
+
     args = parser.parse_args()
 
     if args.no_deploy and not args.contract:
@@ -521,6 +611,18 @@ def main():
         sys.exit(1)
 
     try:
+        # Prepare function arguments
+        function_args = []
+        if args.args:
+            # Use --args if provided
+            function_args = args.args
+        else:
+            # Otherwise use individual --arg1 --arg2 if provided
+            if args.arg1 is not None:
+                function_args.append(args.arg1)
+            if args.arg2 is not None:
+                function_args.append(args.arg2)
+        
         spammer = BlockchainSpammer(
             rpc_url=args.rpc,
             private_key=args.private_key,
@@ -529,6 +631,8 @@ def main():
             rounds_per_tx=args.rounds,
             total_txs=args.txs,
             gas_price_gwei=args.gas_price,
+            contract_name=args.contract_name,
+            function_args=function_args,
         )
 
         spammer.run(deploy=not args.no_deploy, contract_address=args.contract)
